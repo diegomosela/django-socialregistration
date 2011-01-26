@@ -24,6 +24,7 @@ from socialregistration.models import FacebookProfile, TwitterProfile, OpenIDPro
 
 
 FB_ERROR = _('We couldn\'t validate your Facebook credentials')
+FACEBOOK_EXTENDED_PERMISSIONS = getattr(settings, 'FACEBOOK_EXTENDED_PERMISSIONS', [])
 
 GENERATE_USERNAME = bool(getattr(settings, 'SOCIALREGISTRATION_GENERATE_USERNAME', False))
 
@@ -110,7 +111,13 @@ def facebook_login(request, template='socialregistration/facebook.html',
     user = authenticate(uid=request.facebook.uid)
 
     if user is None:
-        request.session['socialregistration_user'] = User()
+        graph = request.facebook.graph.get_object('me')
+        user = User()
+        user.first_name = graph['first_name']
+        user.last_name = graph['last_name']
+        if 'email' in FACEBOOK_EXTENDED_PERMISSIONS and 'email' in graph: 
+            user.email = graph['email']
+        request.session['socialregistration_user'] = user
         request.session['socialregistration_profile'] = FacebookProfile(uid=request.facebook.uid)
         request.session['next'] = _get_next(request)
         return HttpResponseRedirect(reverse('socialregistration_setup'))

@@ -1,15 +1,37 @@
-<div id="fb-root">
-    {% if is_https %}<script src="https://connect.facebook.net/en_US/all.js"></script>{% else %}<script src="http://connect.facebook.net/en_US/all.js"></script>{% endif %}
-</div>
+<div id="fb-root"></div>
 <script>
-  // initialize the library with the API key
-  FB.init({ apiKey: '{{ facebook_api_key }}', status: true, cookie: true, xfbml: true});
+    // initialize the library with the API key
+    window.fbAsyncInit = function(){
+        FB.init({appId: '{{ facebook_app_id }}', status: true, cookie: true, xfbml: true});
 
-  function facebookConnect(form){
-      function handleResponse(response){
-          form.submit();
-      }
-      FB.login(handleResponse/*,{perms:'publish_stream,sms,offline_access,email,read_stream,status_update,etc'}*/);
-  }
+        var facebookConnect = document.getElementById('facebookConnect');
+        facebookConnect.onclick = function() {
+            FB.login(function(response){
+                if (response.session) {
+                    {% comment %}
+                    Use this to check if user granted the extended permissions
+                    if (response.perms) {
+                    } else {
+                    }
+                    {% endcomment %}
 
+                    {% if logged_in %}
+                    window.location = '{% url facebook_connect %}{% if next %}?next={{ next|urlencode }}{% endif %}';
+                    {% else %}
+                    window.location = '{% url facebook_login %}{% if next %}?next={{ next|urlencode }}{% endif %}';
+                    {% endif %}
+                } else {
+                    // Error with the login
+                }
+            }, {perms: '{{ facebook_extended_permissions }}'});
+        }
+    };
+    
+    // Download the library asynchronously
+    (function() {
+        var e = document.createElement('script'); e.async = true;
+        e.src = document.location.protocol + '//connect.facebook.net/en_US/all.js';
+        document.getElementById('fb-root').appendChild(e);
+    }());
 </script>
+

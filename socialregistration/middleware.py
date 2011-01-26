@@ -21,8 +21,9 @@ class FacebookMiddleware(object):
         """
         
         fb_user = facebook.get_user_from_cookie(request.COOKIES,
-            settings.FACEBOOK_API_KEY, settings.FACEBOOK_SECRET_KEY)
+            settings.FACEBOOK_APP_ID, settings.FACEBOOK_SECRET_KEY)
 
         request.facebook = Facebook(fb_user)
         
         return None
+
