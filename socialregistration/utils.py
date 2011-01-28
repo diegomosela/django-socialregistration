@@ -43,6 +43,9 @@ from urlparse import urlparse
 
 USE_HTTPS = bool(getattr(settings, 'SOCIALREGISTRATION_USE_HTTPS', False))
 
+OPENID_SREG = getattr(settings, 'SOCIALREGISTRATION_OPENID_SREG', {})
+OPENID_AX   = getattr(settings, 'SOCIALREGISTRATION_OPENID_AX', {})
+
 def _https():
     if USE_HTTPS:
         return 's'
@@ -136,19 +139,21 @@ class OpenID(object):
 
     def get_redirect(self):
         auth_request = self.consumer.begin(self.endpoint)
-        
-        sregrequest = sreg.SRegRequest(required=['fullname'], optional=['email'])
-        auth_request.addExtension(sregrequest)
-        
-        axrequest = ax.FetchRequest()
-        if self.endpoint.find('google.com') > -1:
-            axrequest.add(ax.AttrInfo('http://axschema.org/namePerson/first', required=True))
-            axrequest.add(ax.AttrInfo('http://axschema.org/namePerson/last', required=True))
-            axrequest.add(ax.AttrInfo('http://axschema.org/contact/email'))
-        else:
-            axrequest.add(ax.AttrInfo('http://axschema.org/namePerson', required=True))
-            axrequest.add(ax.AttrInfo('http://axschema.org/contact/email'))
-        auth_request.addExtension(axrequest)
+       
+        if OPENID_SREG:
+            sregrequest = sreg.SRegRequest(required=OPENID_SREG['required'],
+                                           optional=OPENID_SREG['optional'])
+            sregrequest.policy_url = OPENID_SREG['policy_url']
+            auth_request.addExtension(sregrequest)
+       
+        if OPENID_AX:
+            axrequest = ax.FetchRequest()
+            provider = 'google' if self.endpoint.find('google.com') > -1 else 'default'
+            for attr, url in OPENID_AX[provider]['required']:
+                axrequest.add(ax.AttrInfo(url, required=True))
+            for attr, url in OPENID_AX[provider]['optional']:
+                axrequest.add(ax.AttrInfo(url, required=False))
+            auth_request.addExtension(axrequest)
 
         redirect_url = auth_request.redirectURL(
             'http%s://%s/' % (_https(), Site.objects.get_current().domain),
@@ -172,19 +177,28 @@ class OpenID(object):
     def get_user_info(self):
         if self.is_valid():
             info = {}
-            sregresponse = sreg.SRegResponse.fromSuccessResponse(self.result)
-            if sregresponse:
-                info['fullname'] = sregresponse.get('fullname', '')
-                info['email']    = sregresponse.get('email', '')
-            axresponse = ax.FetchResponse.fromSuccessResponse(self.result)
-            if axresponse:
-                if self.endpoint.find('google.com') > -1:
-                    info['fullname'] = u'%s %s' % (axresponse.getSingle('http://axschema.org/namePerson/first', ''),
-                                                   axresponse.getSingle('http://axschema.org/namePerson/last', ''))
-                    info['email']    = axresponse.getSingle('http://axschema.org/contact/email', '')
-                else:
-                    info['fullname'] = axresponse.getSingle('http://axschema.org/namePerson', '')
-                    info['email']    = axresponse.getSingle('http://axschema.org/contact/email', '')
+            if OPENID_SREG:
+                sregresponse = sreg.SRegResponse.fromSuccessResponse(self.result)
+                if sregresponse:
+                    for attr in OPENID_SREG['required']:
+                        info[attr] = sregresponse.get(attr, '')
+                    for attr in OPENID_SREG['optional']:
+                        info[attr] = sregresponse.get(attr, '')
+
+            if OPENID_AX:
+                axresponse = ax.FetchResponse.fromSuccessResponse(self.result)
+                if axresponse:
+                    provider = 'google' if self.endpoint.find('google.com') > -1 else 'default'
+                    for attr, url in OPENID_AX[provider]['required']:
+                        info[attr] = axresponse.getSingle(url, '')
+                    for attr, url in OPENID_AX[provider]['optional']:
+                        info[attr] = axresponse.getSingle(url, '')
+                    
+                    # If Google, concatenate the first and last names 
+                    if provider == 'google':
+                        info['fullname'] = u'%s %s' % (axresponse.getSingle('http://axschema.org/namePerson/first', ''),
+                                                       axresponse.getSingle('http://axschema.org/namePerson/last', ''))
+
             return info
         return {}
 
