@@ -26,6 +26,7 @@ from openid.consumer import consumer as openid
 from openid.consumer.discover import DiscoveryFailure
 from openid.store.interface import OpenIDStore as OIDStore
 from openid.association import Association as OIDAssociation
+from openid.extensions import ax, sreg
 
 from django.http import HttpResponseRedirect
 from django.core.urlresolvers import reverse
@@ -135,6 +136,20 @@ class OpenID(object):
 
     def get_redirect(self):
         auth_request = self.consumer.begin(self.endpoint)
+        
+        sregrequest = sreg.SRegRequest(required=['fullname'], optional=['email'])
+        auth_request.addExtension(sregrequest)
+        
+        axrequest = ax.FetchRequest()
+        if self.endpoint.find('google.com') > -1:
+            axrequest.add(ax.AttrInfo('http://axschema.org/namePerson/first', required=True))
+            axrequest.add(ax.AttrInfo('http://axschema.org/namePerson/last', required=True))
+            axrequest.add(ax.AttrInfo('http://axschema.org/contact/email'))
+        else:
+            axrequest.add(ax.AttrInfo('http://axschema.org/namePerson', required=True))
+            axrequest.add(ax.AttrInfo('http://axschema.org/contact/email'))
+        auth_request.addExtension(axrequest)
+
         redirect_url = auth_request.redirectURL(
             'http%s://%s/' % (_https(), Site.objects.get_current().domain),
             self.return_to
@@ -154,6 +169,24 @@ class OpenID(object):
 
         return self.result.status == openid.SUCCESS
 
+    def get_user_info(self):
+        if self.is_valid():
+            info = {}
+            sregresponse = sreg.SRegResponse.fromSuccessResponse(self.result)
+            if sregresponse:
+                info['fullname'] = sregresponse.get('fullname', '')
+                info['email']    = sregresponse.get('email', '')
+            axresponse = ax.FetchResponse.fromSuccessResponse(self.result)
+            if axresponse:
+                if self.endpoint.find('google.com') > -1:
+                    info['fullname'] = u'%s %s' % (axresponse.getSingle('http://axschema.org/namePerson/first', ''),
+                                                   axresponse.getSingle('http://axschema.org/namePerson/last', ''))
+                    info['email']    = axresponse.getSingle('http://axschema.org/contact/email', '')
+                else:
+                    info['fullname'] = axresponse.getSingle('http://axschema.org/namePerson', '')
+                    info['email']    = axresponse.getSingle('http://axschema.org/contact/email', '')
+            return info
+        return {}
 
 def get_token_prefix(url):
     """
