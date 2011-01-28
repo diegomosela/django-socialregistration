@@ -189,6 +189,11 @@ def twitter(request, account_inactive_template='socialregistration/account_inact
     if user is None:
         profile = TwitterProfile(twitter_id=user_info['id'])
         user = User()
+        user_full_name = user_info['name'].split(' ')
+        user.first_name = user_full_name[0]
+        user.last_name = ' '.join(user_full_name[1:])
+        # FIXME Twitter does not provide a way to get the user email address
+        user.email = "%s@twitter" % user_info['screen_name']
         request.session['socialregistration_profile'] = profile
         request.session['socialregistration_user'] = user
         request.session['next'] = _get_next(request)
