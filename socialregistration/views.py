@@ -151,13 +151,19 @@ def facebook_connect(request, template='socialregistration/facebook.html',
 def logout(request, redirect_url=None):
     """
     Logs the user out of django. This is only a wrapper around
-    django.contrib.auth.logout. Logging users out of Facebook for instance
-    should be done like described in the developer wiki on facebook.
-    http://wiki.developers.facebook.com/index.php/Connect/Authorization_Websites#Logging_Out_Users
+    django.contrib.auth.logout.
+    Remember: This does not logout the user from third-party sites.
     """
     auth_logout(request)
 
     url = redirect_url or getattr(settings, 'LOGOUT_REDIRECT_URL', '/')
+
+    facebook_app_id = getattr(settings, "FACEBOOK_APP_ID", None)
+    if facebook_app_id is not None and request.facebook.uid is not None:
+        # Render template with Facebook logout JavaScript code
+        return render_to_response("socialregistration/facebook_js_logout.html",
+            {"facebook_app_id": facebook_app_id, "redirect_url": url},
+            context_instance=RequestContext(request))
 
     return HttpResponseRedirect(url)
 
